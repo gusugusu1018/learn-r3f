@@ -4,6 +4,7 @@ import { type RefObject, useRef } from "react";
 import BouncingBox from "./Animation/BouncingBox";
 import { Box, PivotControls } from "@react-three/drei";
 import useOrbitControlToggle from "../hooks/useOrbitControl";
+import state from "../store";
 
 const pointMaterial = new THREE.PointsMaterial({
   color: 0xff0000,
@@ -127,6 +128,7 @@ export function LiDAR2D({
 
   useFrame(({ scene }) => {
     const updatePointVec: THREE.Vector3[] = [];
+    const hitPoints: THREE.Vector3[] = [];
     for (let i = 0; i < numberOfRays; i++) {
       const intersects = raycasters[i].intersectObjects(
         objectsRefs
@@ -135,11 +137,12 @@ export function LiDAR2D({
       );
       if (intersects.length > 0) {
         updatePointVec.push(intersects[0].point);
+        hitPoints.push(intersects[0].point);
       } else {
         updatePointVec.push(endVec[i]);
       }
     }
-    pointRef.current.geometry.setFromPoints(updatePointVec);
+    pointRef.current.geometry.setFromPoints(hitPoints);
     const { vertex, indices } = createRayRangeVertexAndIndices(
       startVec,
       updatePointVec
@@ -149,6 +152,9 @@ export function LiDAR2D({
       new THREE.Float32BufferAttribute(vertex, 3)
     );
     rayMesh.current.geometry.setIndex(indices);
+
+    state.setHitPoints(hitPoints);
+    state.setHitCount(hitPoints.length);
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     scene.add(pointRef.current);
@@ -156,6 +162,7 @@ export function LiDAR2D({
     // @ts-ignore
     scene.add(rayMesh.current);
   });
+
   return <></>;
 }
 

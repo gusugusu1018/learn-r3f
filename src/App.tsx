@@ -7,6 +7,8 @@ import { LaserDistanceSensorExample } from "./components/LaserDistanceSensor";
 import { LiDAR2DExample } from "./components/LiDAR2D";
 import useOrbitControl from "./hooks/useOrbitControl";
 import { OrbitControlProvider } from "./context/OrbitControlContext";
+import Header from "./components/Header";
+import LiDARController from "./components/LiDARController";
 
 function World() {
   const { enableOrbitControl, handleDragStart, handleDragEnd } =
@@ -37,9 +39,8 @@ function World() {
 export default function App() {
   return (
     <div id="main-wrapper">
-      <div className="absolute top-0 w-full bg-background text-white px-4 py-2 z-10">
-        <h1>Learn react three fiber</h1>
-      </div>
+      <Header />
+      <LiDARController />
       <Canvas id="canvas-wrapper" frameloop="always">
         <OrbitControlProvider>
           <World />
