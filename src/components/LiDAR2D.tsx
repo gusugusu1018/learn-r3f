@@ -5,14 +5,8 @@ import BouncingBox from "./Animation/BouncingBox";
 import { Box, PivotControls } from "@react-three/drei";
 import useOrbitControlToggle from "../hooks/useOrbitControl";
 
-const lineMaterial = new THREE.LineBasicMaterial({
-  color: 0xff3333,
-  transparent: false,
-  opacity: 0.1,
-});
-
 const pointMaterial = new THREE.PointsMaterial({
-  color: 0xffffff,
+  color: 0xff0000,
   size: 0.4,
 });
 
@@ -34,6 +28,47 @@ interface LiDAR2DProps {
   angularResolution: number;
 }
 
+function createRayRangeVertexAndIndices(
+  startVec: THREE.Vector3[],
+  endVec: THREE.Vector3[]
+): { vertex: number[]; indices: number[] } {
+  const vertex: number[] = [];
+  const indices: number[] = [];
+  for (let i = 0; i < startVec.length; i++) {
+    const j = 2 * i;
+    vertex.push(startVec[i].x, startVec[i].y, startVec[i].z);
+    vertex.push(endVec[i].x, endVec[i].y, endVec[i].z);
+    if (j + 3 < 2 * startVec.length) indices.push(j, j + 1, j + 3);
+    indices.push(j + 2, j, j + 3);
+  }
+
+  return { vertex, indices };
+}
+
+function createRayRange(
+  startVec: THREE.Vector3[],
+  endVec: THREE.Vector3[]
+): THREE.Mesh {
+  const { vertex, indices } = createRayRangeVertexAndIndices(startVec, endVec);
+  const rayGeometry = new THREE.BufferGeometry();
+  const verticesFloatArray = new Float32Array(vertex);
+  rayGeometry.setAttribute(
+    "position",
+    new THREE.BufferAttribute(verticesFloatArray, 3)
+  );
+  rayGeometry.setIndex(indices);
+
+  const material = new THREE.MeshBasicMaterial({
+    color: 0xff0000,
+    side: THREE.FrontSide, // DoubleSide,
+    transparent: true,
+    opacity: 0.3,
+    depthWrite: false,
+  });
+
+  return new THREE.Mesh(rayGeometry, material);
+}
+
 export function LiDAR2D({
   objectsRefs,
   sensorOrigin,
@@ -46,9 +81,8 @@ export function LiDAR2D({
 
   const startVec: THREE.Vector3[] = [];
   const endVec: THREE.Vector3[] = [];
-  const laserVec: THREE.Vector3[] = [];
   const raycasters: THREE.Raycaster[] = [];
-  const rayVertices: number[] = [];
+
   for (let i = 0; i < numberOfRays; i++) {
     const angle = (i * angularResolution - apertureAngle / 2) * (Math.PI / 180);
     const laserDirection = new THREE.Vector3()
@@ -64,8 +98,6 @@ export function LiDAR2D({
       );
 
     startVec.push(start);
-    laserVec.push(start);
-    rayVertices.push(start.x, start.y, start.z);
 
     const end = new THREE.Vector3()
       .copy(sensorOrigin)
@@ -76,8 +108,6 @@ export function LiDAR2D({
       );
 
     endVec.push(end);
-    laserVec.push(end);
-    rayVertices.push(end.x, end.y, end.z);
 
     const newRay = new THREE.Raycaster(
       sensorOrigin,
@@ -87,41 +117,15 @@ export function LiDAR2D({
     );
     raycasters.push(newRay);
   }
-
-  const lineRef = useRef(
-    new THREE.LineSegments(
-      new THREE.BufferGeometry().setFromPoints(laserVec),
-      lineMaterial
-    )
-  );
   const pointRef = useRef(
     new THREE.Points(
       new THREE.BufferGeometry().setFromPoints(endVec),
       pointMaterial
     )
   );
-
-  const rayGeometry = new THREE.BufferGeometry();
-  const verticesFloatArray = new Float32Array(rayVertices);
-  rayGeometry.setAttribute(
-    "position",
-    new THREE.BufferAttribute(verticesFloatArray, 3)
-  );
-
-  // 半透明のマテリアルを作成
-  const material = new THREE.MeshBasicMaterial({
-    color: 0xff0000,
-    side: THREE.DoubleSide,
-    transparent: true,
-    opacity: 0.1,
-  });
-
-  // メッシュを作成
-  const rayMesh = new THREE.Mesh(rayGeometry, material);
+  const rayMesh = useRef(createRayRange(startVec, endVec));
 
   useFrame(({ scene }) => {
-    if (!lineRef.current || !objectsRefs) return;
-    const updateLaserVec: THREE.Vector3[] = [];
     const updatePointVec: THREE.Vector3[] = [];
     for (let i = 0; i < numberOfRays; i++) {
       const intersects = raycasters[i].intersectObjects(
@@ -129,25 +133,28 @@ export function LiDAR2D({
           .map((ref) => ref.current)
           .filter((obj) => obj !== null) as THREE.Object3D[]
       );
-      updateLaserVec.push(startVec[i]);
       if (intersects.length > 0) {
-        updateLaserVec.push(intersects[0].point);
         updatePointVec.push(intersects[0].point);
       } else {
-        updateLaserVec.push(endVec[i]);
         updatePointVec.push(endVec[i]);
       }
     }
     pointRef.current.geometry.setFromPoints(updatePointVec);
-
-    lineRef.current.geometry.setFromPoints(updateLaserVec);
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-    // @ts-ignore
-    scene.add(lineRef.current);
+    const { vertex, indices } = createRayRangeVertexAndIndices(
+      startVec,
+      updatePointVec
+    );
+    rayMesh.current.geometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(vertex, 3)
+    );
+    rayMesh.current.geometry.setIndex(indices);
     // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
     scene.add(pointRef.current);
-    // scene.add(rayMesh);
+    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+    // @ts-ignore
+    scene.add(rayMesh.current);
   });
   return <></>;
 }
@@ -158,7 +165,7 @@ export function LiDAR2DExample() {
     sensorDirection: new THREE.Vector3(0, 0, -1).normalize(),
     workingDistance: { min: 1, max: 15 },
     apertureAngle: 276,
-    angularResolution: 1, // 0.05, 0.1, 0.125, 0.25, 0.33, 0.5, 1
+    angularResolution: 0.05, // 0.05, 0.1, 0.125, 0.25, 0.33, 0.5, 1
   };
 
   const obstacleBoxRefs = [useRef<THREE.Mesh>(null), useRef<THREE.Mesh>(null)];

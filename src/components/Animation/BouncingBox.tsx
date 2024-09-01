@@ -40,6 +40,7 @@ const BouncingBox = forwardRef<THREE.Mesh, BouncingBoxProps>(
         );
     });
 
+    // biome-ignore lint/style/noNonNullAssertion: <explanation>
     useImperativeHandle(ref, () => boxRef.current!);
 
     return (
